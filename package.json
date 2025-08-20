@@ -1,0 +1,69 @@
+{
+  "name": "@codechu/flow-core-validation",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Flow ecosystem validation abstractions - Pure interfaces for input/output validation with zero logic",
+  "keywords": [
+    "flow",
+    "validation",
+    "typescript",
+    "functional",
+    "result-pattern",
+    "interfaces",
+    "core",
+    "abstractions"
+  ],
+  "author": "Codechu - Obarlik",
+  "license": "MIT",
+  "homepage": "https://github.com/codechu/flow-core-validation#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codechu/flow-core-validation.git"
+  },
+  "bugs": {
+    "url": "https://github.com/codechu/flow-core-validation/issues"
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm test"
+  },
+  "dependencies": {
+    "@codechu/flow-core-seed": "^1.0.0"
+  },
+  "devDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.46.4",
+    "@types/node": "^22.5.0",
+    "tsup": "^8.2.4",
+    "typescript": "^5.5.4"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
