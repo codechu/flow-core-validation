@@ -1,0 +1,172 @@
+name: 🚀 Automated Release on PR Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  auto-release:
+    # Only run on successful merge to main
+    if: |
+      github.event.pull_request.merged == true && 
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      pull-requests: read
+    
+    steps:
+      - name: 🛒 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🧪 Run tests
+        run: npm test
+
+      - name: 🏗️ Build package
+        run: |
+          npm run build
+          echo "✅ Build successful - proceeding with release"
+
+      - name: 🔍 Safe version detection with manual override
+        id: version
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          
+          echo "🔍 Analyzing PR: $PR_TITLE"
+          
+          # 🎯 1. MANUAL OVERRIDE (highest priority)
+          if echo "$PR_TITLE" | grep -E "\[(patch|minor|major)\]"; then
+            MANUAL_VERSION=$(echo "$PR_TITLE" | grep -oE "(patch|minor|major)")
+            echo "bump=$MANUAL_VERSION" >> $GITHUB_OUTPUT
+            echo "🎯 MANUAL OVERRIDE: $MANUAL_VERSION"
+          
+          # 🔴 2. MAJOR - Exact prefix match only  
+          elif [[ "$PR_TITLE" == "BREAKING CHANGE:"* ]] || \
+               [[ "$PR_TITLE" == "breaking:"* ]] || \
+               [[ "$PR_TITLE" == "MAJOR:"* ]] || \
+               [[ "$PR_TITLE" == "NEW VERSION:"* ]]; then
+            echo "bump=major" >> $GITHUB_OUTPUT
+            echo "🔴 MAJOR: Breaking change or new version"
+          
+          # 🟡 3. MINOR - Exact prefix match only
+          elif [[ "$PR_TITLE" == "feat:"* ]] || \
+               [[ "$PR_TITLE" == "feature:"* ]] || \
+               [[ "$PR_TITLE" == "add:"* ]] || \
+               [[ "$PR_TITLE" == "enhance:"* ]]; then
+            echo "bump=minor" >> $GITHUB_OUTPUT
+            echo "🟡 MINOR: New feature"
+          
+          # 🟢 4. PATCH - Safe default
+          else
+            echo "bump=patch" >> $GITHUB_OUTPUT
+            echo "🟢 PATCH: Bug fix or maintenance (safe default)"
+          fi
+
+      - name: 📈 Bump version
+        id: bump
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          
+          # 🎉 FIRST RELEASE LOGIC: If 0.0.0, always go to 1.0.1 (skip 1.0.0 due to NPM cache)
+          if [ "$CURRENT_VERSION" = "0.0.0" ]; then
+            NEW_VERSION=$(npm version 1.0.1 --no-git-tag-version)
+            echo "🎉 FIRST RELEASE: Bumping directly to v1.0.1 (skipping 1.0.0)"
+          else
+            NEW_VERSION=$(npm version ${{ steps.version.outputs.bump }} --no-git-tag-version)
+            echo "📈 Regular version bump: ${{ steps.version.outputs.bump }}"
+          fi
+          
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "current_version=v$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Version bump: v$CURRENT_VERSION → $NEW_VERSION"
+
+      - name: 📝 Generate release notes
+        id: release_notes
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+          NEW_VERSION="${{ steps.bump.outputs.version }}"
+          
+          # Create release notes using direct file write to avoid shell escaping
+          cat > release_notes.md << 'EOF'
+          ## 🎉 Release ${{ steps.bump.outputs.version }}
+
+          **Merged PR:** ${{ github.event.pull_request.title }} (#${{ github.event.pull_request.number }})
+          **Author:** @${{ github.event.pull_request.user.login }}
+          **Version Bump:** ${{ steps.version.outputs.bump }}
+          
+          ### 📋 Changes:
+          ${{ github.event.pull_request.body }}
+          
+          ---
+          
+          ### 📦 Installation:
+          ```bash
+          npm install @codechu/flow-core-validation@${{ steps.bump.outputs.version }}
+          ```
+          
+          ### 🔗 Links:
+          - **NPM Package:** https://www.npmjs.com/package/@codechu/flow-core-validation
+          - **Full Changelog:** https://github.com/${{ github.repository }}/compare/${{ steps.bump.outputs.current_version }}...${{ steps.bump.outputs.version }}
+          EOF
+          
+          echo "Generated release notes for $NEW_VERSION"
+
+      - name: 💾 Commit version bump
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add package.json package-lock.json
+          git commit -m "🔖 Release ${{ steps.bump.outputs.version }}
+
+          Automated version bump from PR merge (#${{ github.event.pull_request.number }})
+          Author: @${{ github.event.pull_request.user.login }}
+          Type: ${{ steps.version.outputs.bump }}"
+          
+          git push origin main
+
+      - name: 🏷️ Create tag and GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION="${{ steps.bump.outputs.version }}"
+          
+          # Create and push tag
+          git tag $NEW_VERSION
+          git push origin $NEW_VERSION
+          
+          # Create GitHub release
+          gh release create $NEW_VERSION \
+            --title "🏷️ $NEW_VERSION - Auto Release" \
+            --notes-file release_notes.md \
+            --latest
+
+      - name: 📦 Publish to NPM
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: 🎉 Success notification
+        run: |
+          NEW_VERSION="${{ steps.bump.outputs.version }}"
+          echo "✅ Successfully released $NEW_VERSION"
+          echo "📦 NPM: https://www.npmjs.com/package/@codechu/flow-core-validation"
+          echo "🔗 Release: https://github.com/${{ github.repository }}/releases/tag/$NEW_VERSION"
+          echo "📋 PR: https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
