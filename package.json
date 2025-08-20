@@ -57,7 +57,6 @@
     "@codechu/flow-core-seed": "^1.0.0"
   },
   "devDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.46.4",
     "@types/node": "^22.5.0",
     "tsup": "^8.2.4",
     "typescript": "^5.5.4"
