@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
+      actions: read
     
     steps:
       - name: 🛒 Checkout code
