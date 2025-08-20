@@ -1,6 +1,6 @@
 {
   "name": "@codechu/flow-core-validation",
-  "version": "1.0.3",
+  "version": "1.0.0",
   "type": "module",
   "description": "Flow ecosystem validation abstractions - Pure interfaces for input/output validation with zero logic",
   "keywords": [
